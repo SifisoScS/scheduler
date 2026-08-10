@@ -12,5 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deadline` module — an immutable `Deadline` value object and a `validate`
   defined-ness check, available from the package root or the `./deadline`
   subpath. Carried over unchanged from `scheduler-deadline`.
+- `interval` module — an immutable `Interval` value object modelling a fixed
+  period, with occurrence lookup by index, next-occurrence and range queries,
+  and `nextDeadline()` to hand the next occurrence to the `deadline` module.
 - Dual ESM and CommonJS builds with per-module subpath exports and type
   definitions for each format.

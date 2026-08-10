@@ -7,7 +7,7 @@
 Building blocks for task scheduling: small, immutable, dependency-free
 primitives that model time correctly.
 
-> **Status: 0.x.** One module ships today. The API may change before 1.0.
+> **Status: 0.x.** Two modules ship today. The API may change before 1.0.
 
 ## Why this exists
 
@@ -34,9 +34,10 @@ Import from the root, or from a module directly — both give you the same
 bindings, and the subpath lets a bundler drop everything else:
 
 ```typescript
-import { Deadline } from '@sifiso-guy/scheduler';
+import { Deadline, Interval } from '@sifiso-guy/scheduler';
 // or
 import { Deadline } from '@sifiso-guy/scheduler/deadline';
+import { Interval } from '@sifiso-guy/scheduler/interval';
 ```
 
 ```typescript
@@ -83,6 +84,47 @@ deadline.isOverdue(); // still false
 | `getDescription(): string \| undefined` | `undefined` if omitted; `''` is preserved as `''`.          |
 | `isOverdue(now?): boolean`              | `true` only when strictly past. Throws on an invalid `now`. |
 | `validate(input): boolean`              | Defined-ness check — `0`, `''` and `false` are all `true`.  |
+
+### `interval`
+
+A fixed-period repetition: a starting instant and a gap between occurrences.
+Holds no timers — occurrences are computed arithmetically on demand.
+
+```typescript
+const every5min = new Interval(new Date('2026-01-01T00:00:00Z'), 5 * 60_000);
+
+every5min.occurrenceAt(0); // the start itself — indices are zero-based
+every5min.nextOccurrenceAfter(now); // first occurrence strictly after now
+every5min.countBetween(from, to); // half-open [from, to)
+every5min.occurrencesBetween(from, to); // the same range, materialised
+```
+
+`everyMs` must be a positive integer, and occurrences that would fall outside
+the range of a `Date` throw a `RangeError` rather than yielding an Invalid Date.
+
+`occurrencesBetween` caps at 1000 results by default and throws if the range
+holds more, so a wide window cannot quietly allocate an enormous array. Raise
+the limit deliberately with the third argument.
+
+**Composing with `deadline`** — this is why the modules share a package:
+
+```typescript
+const deadline = every5min.nextDeadline('poll upstream');
+deadline.isOverdue(); // false, until the next occurrence passes
+```
+
+#### API
+
+| Member                                         | Behaviour                                                           |
+| ---------------------------------------------- | ------------------------------------------------------------------- |
+| `new Interval(startsAt, everyMs)`              | Throws unless `startsAt` is valid and `everyMs` a positive integer. |
+| `getStartsAt(): Date`                          | Returns a **copy**.                                                 |
+| `getEveryMs(): number`                         | The gap, in milliseconds.                                           |
+| `occurrenceAt(index): Date`                    | Zero-based. `RangeError` if it overflows `Date`.                    |
+| `nextOccurrenceAfter(now?): Date`              | Strictly after `now`; at an occurrence exactly, returns the next.   |
+| `countBetween(from, to): number`               | Half-open `[from, to)`.                                             |
+| `occurrencesBetween(from, to, limit?): Date[]` | Same range, materialised. Throws above `limit` (default 1000).      |
+| `nextDeadline(description?, now?): Deadline`   | The next occurrence, as a `Deadline`.                               |
 
 ## Adding a module
 

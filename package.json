@@ -25,6 +25,16 @@
         "default": "./dist/cjs/deadline/index.js"
       }
     },
+    "./interval": {
+      "import": {
+        "types": "./dist/esm/interval/index.d.ts",
+        "default": "./dist/esm/interval/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/interval/index.d.ts",
+        "default": "./dist/cjs/interval/index.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "sideEffects": false,

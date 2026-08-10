@@ -127,7 +127,15 @@ jobs:
               require('@sifiso-guy/scheduler/deadline').Deadline,
               'root and subpath must expose the same binding'
             );
+            const iv = norm(require.resolve('@sifiso-guy/scheduler/interval'));
+            assert.ok(iv.endsWith('dist/cjs/interval/index.js'), 'interval subpath must resolve to the CJS module, got ' + iv);
+            assert.equal(
+              require('@sifiso-guy/scheduler').Interval,
+              require('@sifiso-guy/scheduler/interval').Interval,
+              'root and subpath must expose the same binding'
+            );
             console.log('require ./deadline ->', sub);
+            console.log('require ./interval ->', iv);
           "
           node --input-type=module -e "
             import assert from 'node:assert/strict';
@@ -136,5 +144,10 @@ jobs:
             const root = await import('@sifiso-guy/scheduler');
             const mod = await import('@sifiso-guy/scheduler/deadline');
             assert.equal(root.Deadline, mod.Deadline, 'root and subpath must expose the same binding');
+            const iv = import.meta.resolve('@sifiso-guy/scheduler/interval');
+            assert.ok(iv.endsWith('dist/esm/interval/index.js'), 'interval subpath must resolve to the ESM module, got ' + iv);
+            const ivMod = await import('@sifiso-guy/scheduler/interval');
+            assert.equal(root.Interval, ivMod.Interval, 'root and subpath must expose the same binding');
             console.log('import  ./deadline ->', sub);
+            console.log('import  ./interval ->', iv);
           "

@@ -9,3 +9,4 @@
  */
 
 export { Deadline, validate } from './deadline/index.js';
+export { Interval } from './interval/index.js';
