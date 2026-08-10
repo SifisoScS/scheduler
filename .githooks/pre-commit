@@ -1,0 +1,17 @@
+#!/bin/sh
+#
+# Refuses to commit a platform-pruned package-lock.json.
+#
+# Enabled by `npm run prepare`, which points core.hooksPath at this directory.
+# Checks the staged blob rather than the working tree, so `git add -p` and
+# partially staged changes are handled correctly.
+
+if ! git diff --cached --name-only | grep -q '^package-lock\.json$'; then
+  exit 0
+fi
+
+staged=$(mktemp)
+trap 'rm -f "$staged"' EXIT
+git show :package-lock.json >"$staged"
+
+node scripts/check-lockfile.js "$staged"

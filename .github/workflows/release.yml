@@ -1,0 +1,81 @@
+name: Release
+
+# Publishing is driven by an annotated tag, so the released commit is always
+# identifiable and the tag is the single source of truth for the version.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm-publish
+
+    permissions:
+      contents: read
+      # The OIDC token npm exchanges for publish rights under trusted
+      # publishing, and the same mechanism that signs the provenance
+      # attestation. Without this the publish cannot authenticate at all.
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Trusted publishing requires npm >= 11.5.1 and Node >= 22.14.0.
+      # Node 24 currently ships npm 11.16.0, comfortably above both.
+      # Dependency caching is deliberately not enabled: npm advises against it
+      # in release builds, where a poisoned or stale cache would be baked into
+      # a signed, published artifact.
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify lockfile is not platform-pruned
+        run: npm run check-lockfile
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The tag is authoritative. Publishing a tag whose version disagrees with
+      # package.json would produce a release nobody can trace back, so fail loudly.
+      - name: Verify tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match package.json version $PKG"
+            exit 1
+          fi
+          echo "Releasing version $PKG"
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      # Authenticated by OIDC via the npm trusted publisher configured for this
+      # package, so there is no token to store, rotate or leak. Provenance is
+      # generated automatically under trusted publishing — passing
+      # --provenance explicitly is unnecessary.
+      - name: Publish to npm
+        run: npm publish --access public

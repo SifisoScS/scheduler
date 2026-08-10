@@ -1,0 +1,55 @@
+version: 2
+
+updates:
+  # Development dependencies only — this package has no runtime dependencies.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # Keep the linting and testing toolchains together so related majors land
+      # in one reviewable PR rather than several conflicting ones.
+      eslint:
+        patterns:
+          - eslint
+          - '@eslint/*'
+          - typescript-eslint
+      jest:
+        patterns:
+          - jest
+          - ts-jest
+          - '@types/jest'
+      dev-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Deliberately pinned to the minimum supported runtime (engines.node).
+      # A major bump would type APIs that do not exist on Node 20 and would
+      # break our own support promise — and CI cannot catch it, because CI
+      # would be running against these same types. Raise this together with
+      # engines.node, never on its own.
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
+      # ts-jest declares `typescript: ">=4.3 <7"` and no published version
+      # accepts TypeScript 7, so a major bump fails `npm ci` with ERESOLVE
+      # before any test runs. Drop this entry once ts-jest supports TS 7 —
+      # or if the Jest transformer is swapped for one that does not gate on
+      # the compiler version.
+      - dependency-name: 'typescript'
+        update-types:
+          - version-update:semver-major
+
+  # Actions in the CI workflow are pinned to commit SHAs; Dependabot updates the
+  # SHA and the trailing version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore

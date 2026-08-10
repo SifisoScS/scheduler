@@ -1,0 +1,7 @@
+# Normalise all text files to LF in the repository and in the working tree.
+# Without this, Git checks files out as CRLF on Windows and `npm run
+# format:check` fails locally while passing in CI, which runs on Linux.
+* text=auto eol=lf
+
+# Generated; keep out of diffs and language statistics.
+package-lock.json linguist-generated=true -diff

@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: this workflow only ever reads the repository.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22, 24]
+
+    steps:
+      # Actions are pinned to commit SHAs rather than mutable tags so a
+      # compromised or force-moved tag cannot silently change what runs here.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      # Runs before install: a pruned lockfile is a property of the file itself,
+      # and failing here gives a clearer message than a later ENOENT would.
+      - name: Verify lockfile is not platform-pruned
+        run: npm run check-lockfile
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      # Exercises the compiled output the way a consumer would. Both formats are
+      # checked: a broken ESM emit is invisible to the CommonJS test suite, so
+      # only this step would catch it.
+      #
+      # These assertions are deliberately generic so the template is green from
+      # the first commit. Replace them with real assertions about your API — a
+      # module that merely loads without throwing is not a test.
+      - name: Smoke test (CommonJS build)
+        run: |
+          node -e "
+            const assert = require('node:assert/strict');
+            const api = require('./dist/cjs/index.js');
+            assert.ok(Object.keys(api).length > 0, 'CJS build exports nothing');
+            console.log('cjs exports:', Object.keys(api).join(', '));
+          "
+
+      - name: Smoke test (ESM build)
+        run: |
+          node --input-type=module -e "
+            import assert from 'node:assert/strict';
+            import * as api from './dist/esm/index.js';
+            assert.ok(Object.keys(api).length > 0, 'ESM build exports nothing');
+            console.log('esm exports:', Object.keys(api).join(', '));
+          "
+
+      # Resolution through the exports map is a separate failure mode from the
+      # builds themselves: both can be correct while consumers still get the
+      # wrong file, or nothing at all. Package name is read from package.json,
+      # so this works unchanged after you rename the package.
+      - name: Verify packaged exports resolve
+        run: |
+          mkdir -p /tmp/pkg /tmp/consumer
+          npm pack --pack-destination /tmp/pkg
+          NAME=$(node -p "require('./package.json').name")
+          cd /tmp/consumer
+          echo '{"name":"consumer","version":"1.0.0","private":true}' > package.json
+          npm install /tmp/pkg/*.tgz
+          NAME="$NAME" node -e "
+            const assert = require('node:assert/strict');
+            const { sep } = require('node:path');
+            const resolved = require.resolve(process.env.NAME).split(sep).join('/');
+            assert.ok(resolved.endsWith('dist/cjs/index.js'), 'require must resolve to the CJS build, got ' + resolved);
+            console.log('require ->', resolved);
+          "
+          NAME="$NAME" node --input-type=module -e "
+            import assert from 'node:assert/strict';
+            const resolved = import.meta.resolve(process.env.NAME);
+            assert.ok(resolved.endsWith('dist/esm/index.js'), 'import must resolve to the ESM build, got ' + resolved);
+            const mod = await import(process.env.NAME);
+            assert.ok(Object.keys(mod).length > 0, 'packaged ESM exports nothing');
+            console.log('import  ->', resolved);
+          "
+
+      # Subpath exports are their own failure mode: the root can resolve
+      # perfectly while `pkg/module` 404s, or silently returns a second copy of
+      # the same class. Checked against the packed tarball, not the source tree.
+      - name: Verify subpath exports resolve
+        run: |
+          cd /tmp/consumer
+          NAME=$(node -p "require('/tmp/consumer/node_modules/@sifiso-guy/scheduler/package.json').name")
+          node -e "
+            const assert = require('node:assert/strict');
+            const { sep } = require('node:path');
+            const norm = (p) => p.split(sep).join('/');
+            const sub = norm(require.resolve('@sifiso-guy/scheduler/deadline'));
+            assert.ok(sub.endsWith('dist/cjs/deadline/index.js'), 'subpath must resolve to the CJS module, got ' + sub);
+            assert.equal(
+              require('@sifiso-guy/scheduler').Deadline,
+              require('@sifiso-guy/scheduler/deadline').Deadline,
+              'root and subpath must expose the same binding'
+            );
+            console.log('require ./deadline ->', sub);
+          "
+          node --input-type=module -e "
+            import assert from 'node:assert/strict';
+            const sub = import.meta.resolve('@sifiso-guy/scheduler/deadline');
+            assert.ok(sub.endsWith('dist/esm/deadline/index.js'), 'subpath must resolve to the ESM module, got ' + sub);
+            const root = await import('@sifiso-guy/scheduler');
+            const mod = await import('@sifiso-guy/scheduler/deadline');
+            assert.equal(root.Deadline, mod.Deadline, 'root and subpath must expose the same binding');
+            console.log('import  ./deadline ->', sub);
+          "

@@ -1,0 +1,83 @@
+{
+  "name": "@sifiso-guy/scheduler",
+  "version": "0.1.0",
+  "description": "Building blocks for task scheduling. Small, immutable, dependency-free primitives that model time correctly.",
+  "main": "./dist/cjs/index.js",
+  "types": "./dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      }
+    },
+    "./deadline": {
+      "import": {
+        "types": "./dist/esm/deadline/index.d.ts",
+        "default": "./dist/esm/deadline/index.js"
+      },
+      "require": {
+        "types": "./dist/cjs/deadline/index.d.ts",
+        "default": "./dist/cjs/deadline/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run clean && tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.esm.json && node scripts/write-dist-markers.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "type-check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "check-lockfile": "node scripts/check-lockfile.js",
+    "prepare": "git config core.hooksPath .githooks || exit 0",
+    "prepublishOnly": "npm run lint && npm run type-check && npm run test:coverage && npm run build"
+  },
+  "keywords": [
+    "scheduler",
+    "deadline",
+    "task",
+    "typescript",
+    "immutable"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.19.43",
+    "eslint": "^10.8.0",
+    "jest": "^30.4.2",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.66.0"
+  },
+  "directories": {
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SifisoScS/scheduler.git"
+  },
+  "author": "Sifiso Cyprian Shezi",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/SifisoScS/scheduler/issues"
+  },
+  "homepage": "https://github.com/SifisoScS/scheduler#readme"
+}

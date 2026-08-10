@@ -1,0 +1,9 @@
+{
+  // The base config already emits CommonJS: module/moduleResolution are Node16
+  // and the root package.json is "type": "commonjs". Only the output directory
+  // differs, and dist/cjs/package.json pins the format explicitly.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "dist/cjs"
+  }
+}
