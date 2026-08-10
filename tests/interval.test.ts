@@ -213,3 +213,62 @@ describe('Interval.nextDeadline', () => {
     ).toBeUndefined();
   });
 });
+
+describe('Interval serialisation', () => {
+  test('toJSON emits the documented shape', () => {
+    expect(new Interval(EPOCH, MINUTE).toJSON()).toEqual({
+      startsAt: '2026-01-01T00:00:00.000Z',
+      everyMs: 60_000,
+    });
+  });
+
+  test('JSON.stringify uses toJSON, not the internal fields', () => {
+    expect(JSON.stringify(new Interval(EPOCH, MINUTE))).toBe(
+      '{"startsAt":"2026-01-01T00:00:00.000Z","everyMs":60000}',
+    );
+  });
+
+  test('private fields do not leak through Object.keys', () => {
+    expect(Object.keys(new Interval(EPOCH, MINUTE))).toEqual([]);
+  });
+
+  test('round-trips through JSON', () => {
+    const original = new Interval(EPOCH, 5 * MINUTE);
+    const restored = Interval.fromJSON(JSON.parse(JSON.stringify(original)));
+
+    expect(restored.getStartsAt()).toEqual(original.getStartsAt());
+    expect(restored.getEveryMs()).toBe(original.getEveryMs());
+  });
+
+  test.each([
+    ['a string', '2026-01-01'],
+    ['null', null],
+    ['a number', 42],
+  ])('fromJSON rejects %s', (_label, value) => {
+    expect(() => Interval.fromJSON(value)).toThrow('Invalid Interval JSON: expected an object.');
+  });
+
+  test('fromJSON rejects a non-string startsAt', () => {
+    expect(() => Interval.fromJSON({ startsAt: 0, everyMs: MINUTE })).toThrow(
+      'Invalid Interval JSON: startsAt must be an ISO date string.',
+    );
+  });
+
+  test('fromJSON rejects an unparseable startsAt', () => {
+    expect(() => Interval.fromJSON({ startsAt: 'not a date', everyMs: MINUTE })).toThrow(
+      'Invalid Interval JSON: startsAt is not a valid ISO date string.',
+    );
+  });
+
+  test('fromJSON rejects a non-number everyMs', () => {
+    expect(() => Interval.fromJSON({ startsAt: EPOCH.toISOString(), everyMs: '60000' })).toThrow(
+      'Invalid Interval JSON: everyMs must be a number.',
+    );
+  });
+
+  test('fromJSON still enforces the constructor rules', () => {
+    expect(() => Interval.fromJSON({ startsAt: EPOCH.toISOString(), everyMs: 0 })).toThrow(
+      'Invalid everyMs: must be a positive integer number of milliseconds.',
+    );
+  });
+});

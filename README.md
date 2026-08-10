@@ -83,6 +83,10 @@ deadline.isOverdue(); // still false
 | `getDueDate(): Date`                    | Returns a **copy**. Mutating it does nothing.               |
 | `getDescription(): string \| undefined` | `undefined` if omitted; `''` is preserved as `''`.          |
 | `isOverdue(now?): boolean`              | `true` only when strictly past. Throws on an invalid `now`. |
+| `msUntil(now?): number`                 | Milliseconds until due; negative once overdue.              |
+| `toJSON(): DeadlineJSON`                | The documented serialised form.                             |
+| `Deadline.fromJSON(value)`              | Rebuilds one, validating the input.                         |
+| `Deadline.compare(a, b)`                | Sort comparator, earliest first.                            |
 | `validate(input): boolean`              | Defined-ness check — `0`, `''` and `false` are all `true`.  |
 
 ### `interval`
@@ -105,6 +109,26 @@ the range of a `Date` throw a `RangeError` rather than yielding an Invalid Date.
 `occurrencesBetween` caps at 1000 results by default and throws if the range
 holds more, so a wide window cannot quietly allocate an enormous array. Raise
 the limit deliberately with the third argument.
+
+**Persistence.** Both modules serialise to a documented shape and validate on
+the way back in, so scheduler state survives a restart:
+
+```typescript
+const persisted = JSON.stringify(every5min);
+const restored = Interval.fromJSON(JSON.parse(persisted));
+```
+
+Fields are ECMAScript `#private`, so the internal representation cannot leak
+through `JSON.stringify` or `Object.keys` — `toJSON` is the only serialised
+form, and it is covered by semantic versioning.
+
+**Ordering.** `Deadline.compare` is a ready-made sort comparator, which is what
+picking the soonest of several schedules actually needs:
+
+```typescript
+const next = jobs.map((j) => j.interval.nextDeadline(j.name, now)).sort(Deadline.compare)[0];
+const delayMs = Math.max(0, next.msUntil(now));
+```
 
 **Composing with `deadline`** — this is why the modules share a package:
 

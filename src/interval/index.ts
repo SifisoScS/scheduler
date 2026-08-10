@@ -26,6 +26,20 @@ function assertValidDate(value: Date, label: string): void {
 }
 
 /**
+ * The serialised form of an {@link Interval}.
+ *
+ * A deliberate contract rather than an accident of the field names: it is what
+ * {@link Interval.toJSON} emits and {@link Interval.fromJSON} accepts, and it
+ * is covered by semantic versioning.
+ */
+export interface IntervalJSON {
+  /** The first occurrence, as an ISO 8601 string. */
+  startsAt: string;
+  /** Milliseconds between occurrences. */
+  everyMs: number;
+}
+
+/**
  * A fixed-period repetition: a starting instant and a gap between occurrences.
  *
  * Instances are immutable and hold no timers — occurrences are computed
@@ -33,10 +47,14 @@ function assertValidDate(value: Date, label: string): void {
  * unless you pass a time in.
  *
  * Occurrence indices are zero-based: occurrence 0 is `startsAt` itself.
+ *
+ * Fields are ECMAScript private (`#`), not TypeScript `private`, so the
+ * internal representation cannot leak through `JSON.stringify` or
+ * `Object.keys`. {@link toJSON} is the only serialised form.
  */
 export class Interval {
-  private readonly startsAt: Date;
-  private readonly everyMs: number;
+  readonly #startsAt: Date;
+  readonly #everyMs: number;
 
   /**
    * Creates an interval.
@@ -51,22 +69,22 @@ export class Interval {
       throw new Error('Invalid everyMs: must be a positive integer number of milliseconds.');
     }
 
-    this.startsAt = new Date(startsAt.getTime());
-    this.everyMs = everyMs;
+    this.#startsAt = new Date(startsAt.getTime());
+    this.#everyMs = everyMs;
   }
 
   /**
    * Returns a copy of the first occurrence.
    */
   getStartsAt(): Date {
-    return new Date(this.startsAt.getTime());
+    return new Date(this.#startsAt.getTime());
   }
 
   /**
    * Returns the gap between occurrences, in milliseconds.
    */
   getEveryMs(): number {
-    return this.everyMs;
+    return this.#everyMs;
   }
 
   /**
@@ -80,7 +98,7 @@ export class Interval {
       throw new Error('Invalid index: must be a non-negative integer.');
     }
 
-    const timestamp = this.startsAt.getTime() + index * this.everyMs;
+    const timestamp = this.#startsAt.getTime() + index * this.#everyMs;
 
     if (!Number.isSafeInteger(timestamp) || Math.abs(timestamp) > MAX_TIMESTAMP) {
       throw new RangeError(`Occurrence ${index} falls outside the range of a Date.`);
@@ -102,14 +120,14 @@ export class Interval {
   nextOccurrenceAfter(now: Date = new Date()): Date {
     assertValidDate(now, 'now');
 
-    const start = this.startsAt.getTime();
+    const start = this.#startsAt.getTime();
     const reference = now.getTime();
 
     if (reference < start) {
       return new Date(start);
     }
 
-    return this.occurrenceAt(Math.floor((reference - start) / this.everyMs) + 1);
+    return this.occurrenceAt(Math.floor((reference - start) / this.#everyMs) + 1);
   }
 
   /**
@@ -123,15 +141,15 @@ export class Interval {
     assertValidDate(from, 'from');
     assertValidDate(to, 'to');
 
-    const start = this.startsAt.getTime();
+    const start = this.#startsAt.getTime();
     const upper = to.getTime();
 
     if (upper <= from.getTime() || upper <= start) {
       return 0;
     }
 
-    const firstIndex = Math.max(0, Math.ceil((from.getTime() - start) / this.everyMs));
-    const countUpToUpper = Math.ceil((upper - start) / this.everyMs);
+    const firstIndex = Math.max(0, Math.ceil((from.getTime() - start) / this.#everyMs));
+    const countUpToUpper = Math.ceil((upper - start) / this.#everyMs);
 
     return Math.max(0, countUpToUpper - firstIndex);
   }
@@ -159,8 +177,8 @@ export class Interval {
       );
     }
 
-    const start = this.startsAt.getTime();
-    const firstIndex = Math.max(0, Math.ceil((from.getTime() - start) / this.everyMs));
+    const start = this.#startsAt.getTime();
+    const firstIndex = Math.max(0, Math.ceil((from.getTime() - start) / this.#everyMs));
 
     return Array.from({ length: count }, (_unused, offset) =>
       this.occurrenceAt(firstIndex + offset),
@@ -177,5 +195,45 @@ export class Interval {
    */
   nextDeadline(description?: string, now?: Date): Deadline {
     return new Deadline(this.nextOccurrenceAfter(now), description);
+  }
+
+  /**
+   * Returns the serialised form. Called automatically by `JSON.stringify`.
+   */
+  toJSON(): IntervalJSON {
+    return { startsAt: this.#startsAt.toISOString(), everyMs: this.#everyMs };
+  }
+
+  /**
+   * Rebuilds an Interval from {@link toJSON} output.
+   *
+   * Validates the input rather than trusting it — this is a parsing boundary,
+   * and the value has usually come from storage or the network.
+   *
+   * @param value - A parsed JSON value.
+   * @throws {Error} If the value is not a valid serialised Interval.
+   */
+  static fromJSON(value: unknown): Interval {
+    if (typeof value !== 'object' || value === null) {
+      throw new Error('Invalid Interval JSON: expected an object.');
+    }
+
+    const { startsAt, everyMs } = value as Partial<IntervalJSON>;
+
+    if (typeof startsAt !== 'string') {
+      throw new Error('Invalid Interval JSON: startsAt must be an ISO date string.');
+    }
+
+    const parsed = new Date(startsAt);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error('Invalid Interval JSON: startsAt is not a valid ISO date string.');
+    }
+
+    if (typeof everyMs !== 'number') {
+      throw new Error('Invalid Interval JSON: everyMs must be a number.');
+    }
+
+    return new Interval(parsed, everyMs);
   }
 }

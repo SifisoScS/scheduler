@@ -132,3 +132,121 @@ describe('Deadline immutability', () => {
     expect(first).toEqual(second);
   });
 });
+
+describe('Deadline.msUntil', () => {
+  const due = new Date('2026-06-01T12:00:00.000Z');
+
+  test('is positive before the deadline', () => {
+    expect(new Deadline(due).msUntil(new Date(due.getTime() - 5000))).toBe(5000);
+  });
+
+  test('is zero at the exact instant', () => {
+    expect(new Deadline(due).msUntil(due)).toBe(0);
+  });
+
+  test('is negative once overdue, by exactly how long', () => {
+    expect(new Deadline(due).msUntil(new Date(due.getTime() + 250))).toBe(-250);
+  });
+
+  test('defaults to the current time', () => {
+    expect(new Deadline(new Date(Date.now() + 60_000)).msUntil()).toBeGreaterThan(0);
+  });
+
+  test('throws when now is invalid', () => {
+    expect(() => new Deadline(due).msUntil(new Date('nope'))).toThrow(
+      'Invalid now: must be a valid Date object.',
+    );
+  });
+});
+
+describe('Deadline.compare', () => {
+  const earlier = new Deadline(new Date('2026-01-01T00:00:00.000Z'), 'earlier');
+  const later = new Deadline(new Date('2026-06-01T00:00:00.000Z'), 'later');
+  const alsoEarlier = new Deadline(new Date('2026-01-01T00:00:00.000Z'), 'same instant');
+
+  test('orders earliest first', () => {
+    expect(Deadline.compare(earlier, later)).toBeLessThan(0);
+    expect(Deadline.compare(later, earlier)).toBeGreaterThan(0);
+  });
+
+  test('is zero for the same instant', () => {
+    expect(Deadline.compare(earlier, alsoEarlier)).toBe(0);
+  });
+
+  test('works directly as a sort comparator', () => {
+    expect([later, earlier].sort(Deadline.compare).map((d) => d.getDescription())).toEqual([
+      'earlier',
+      'later',
+    ]);
+  });
+});
+
+describe('Deadline serialisation', () => {
+  const due = new Date('2026-06-01T12:00:00.000Z');
+
+  test('toJSON emits the documented shape', () => {
+    expect(new Deadline(due, 'ship it').toJSON()).toEqual({
+      dueDate: '2026-06-01T12:00:00.000Z',
+      description: 'ship it',
+    });
+  });
+
+  test('toJSON omits description entirely when there is none', () => {
+    expect(new Deadline(due).toJSON()).toEqual({ dueDate: '2026-06-01T12:00:00.000Z' });
+    expect('description' in new Deadline(due).toJSON()).toBe(false);
+  });
+
+  test('JSON.stringify uses toJSON, not the internal fields', () => {
+    expect(JSON.stringify(new Deadline(due))).toBe('{"dueDate":"2026-06-01T12:00:00.000Z"}');
+  });
+
+  test('private fields do not leak through Object.keys', () => {
+    expect(Object.keys(new Deadline(due, 'x'))).toEqual([]);
+  });
+
+  test('round-trips through JSON', () => {
+    const original = new Deadline(due, 'ship it');
+    const restored = Deadline.fromJSON(JSON.parse(JSON.stringify(original)));
+
+    expect(restored.getDueDate()).toEqual(original.getDueDate());
+    expect(restored.getDescription()).toBe('ship it');
+  });
+
+  test('round-trips without a description', () => {
+    const restored = Deadline.fromJSON(JSON.parse(JSON.stringify(new Deadline(due))));
+
+    expect(restored.getDescription()).toBeUndefined();
+  });
+
+  test.each([
+    ['a string', '2026-06-01'],
+    ['null', null],
+    ['a number', 42],
+  ])('fromJSON rejects %s', (_label, value) => {
+    expect(() => Deadline.fromJSON(value)).toThrow('Invalid Deadline JSON: expected an object.');
+  });
+
+  test('fromJSON rejects a missing dueDate', () => {
+    expect(() => Deadline.fromJSON({})).toThrow(
+      'Invalid Deadline JSON: dueDate must be an ISO date string.',
+    );
+  });
+
+  test('fromJSON rejects a non-string dueDate', () => {
+    expect(() => Deadline.fromJSON({ dueDate: 1717243200000 })).toThrow(
+      'Invalid Deadline JSON: dueDate must be an ISO date string.',
+    );
+  });
+
+  test('fromJSON rejects an unparseable dueDate', () => {
+    expect(() => Deadline.fromJSON({ dueDate: 'not a date' })).toThrow(
+      'Invalid Deadline JSON: dueDate is not a valid ISO date string.',
+    );
+  });
+
+  test('fromJSON rejects a non-string description', () => {
+    expect(() => Deadline.fromJSON({ dueDate: due.toISOString(), description: 7 })).toThrow(
+      'Invalid Deadline JSON: description must be a string when present.',
+    );
+  });
+});
